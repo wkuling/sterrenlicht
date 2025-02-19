@@ -10,20 +10,27 @@ function witsecSendMail(frm, callback) {
 
 	// Check if a reCAPTCHA site key is defined (v3)
 	if (typeof witsecRcpSitekey !== 'undefined') {
-		grecaptcha.ready(function() {
-			grecaptcha.execute(witsecRcpSitekey, {action: "homepage"}).then(function(token) {
-				if (frm.querySelector("input[name=g-recaptcha-response]"))
-					frm.querySelector("input[name=g-recaptcha-response]").remove();
+		if (typeof grecaptcha !== 'undefined') {
+			grecaptcha.ready(function() {
+				grecaptcha.execute(witsecRcpSitekey, {action: "homepage"}).then(function(token) {
+					if (frm.querySelector("input[name=g-recaptcha-response]"))
+						frm.querySelector("input[name=g-recaptcha-response]").remove();
 
-				let inp = document.createElement("input");
-				inp.type  = "hidden";
-				inp.name  = "g-recaptcha-response";
-				inp.value = token;
-				frm.appendChild(inp);
+					let inp = document.createElement("input");
+					inp.type  = "hidden";
+					inp.name  = "g-recaptcha-response";
+					inp.value = token;
+					frm.appendChild(inp);
 
-				witsecSendMailAjax(frm, callback);
+					witsecSendMailAjax(frm, callback);
+				});
 			});
-		});
+		} else {
+			// If this is the case, the captcha hasn't been loaded, might be due to cookie consent
+			witsecMfSetErrors(frm.querySelector("div.alert-danger"), { "errorcode": "E1220", "message": "Form not ready" });
+			frm.querySelector("div.alert-danger").hidden = false;
+			return false;
+		}
 	}
 	else {
 		// If reCAPTCHA v2 is used, check if the checkbox is checked
@@ -43,7 +50,7 @@ function witsecSendMailAjax(frm, callback) {
 
 	// Let's try to send the form
 	let xhr = new XMLHttpRequest();
-	xhr.open("POST", "assets/witsec-mailform/mail.php", true);
+	xhr.open("POST", "assets/witsec-mailform/mailform.php", true);
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState == 4) {
 			if (xhr.status == 200) {
@@ -143,7 +150,7 @@ function witsecMfSetErrors(div, data) {
 /* LISTENERS */
 
 // When someone entered a CAPTCHA code
-listen(".witsec-mailform form input[name='captcha']", "change", function(event) {
+mfListen(".witsec-mailform form input[name='captcha']", "change", function(event) {
 	f = event.target;
 
 	let xhr = new XMLHttpRequest();
@@ -167,7 +174,7 @@ listen(".witsec-mailform form input[name='captcha']", "change", function(event) 
 
 
 // When CAPTCHA reload has been clicked
-listen(".witsec-mailform form .captchaReload", "click", function(event) {
+mfListen(".witsec-mailform form .captchaReload", "click", function(event) {
 	let p = event.target.closest("form");
 
 	if (p && p.querySelector(".captcha") && p.querySelector("input[name='captcha']")) {
@@ -179,7 +186,7 @@ listen(".witsec-mailform form .captchaReload", "click", function(event) {
 
 
 // Listen for form submits
-listen("section.witsec-mailform form", "submit", function(event) {
+mfListen("section.witsec-mailform form", "submit", function(event) {
 	if (event.target.hasAttribute("onsubmit"))
 		return;
 
@@ -200,6 +207,13 @@ function isIE() {
 
 // If ready and we're dealing with IE, then add some functions that proper browsers all support
 document.addEventListener("DOMContentLoaded", function(event) {
+	wsRegisterClosest();
+});
+
+function wsRegisterClosest() {
+	if (document.readyState === "loading")
+		return false;
+
 	if (isIE()) {
 		// Register 'closest' function
 		Object.prototype.closest = function (selector) {
@@ -221,14 +235,18 @@ document.addEventListener("DOMContentLoaded", function(event) {
 			return this.msMatchesSelector(selector);
 		};
 	}
-});
+}
 
 
 /* HELPERS */
 
 // Function to quickly register an event listener using a selector
-function listen(selector, event, func) {
+function mfListen(selector, event, func) {
 	var el = document.querySelectorAll(selector);
 	for (var i = 0; i < el.length; i++)
 		el[i].addEventListener(event, func);
 }
+
+
+// Trigger specific functions in case this script file is injected -after- the DOMContentLoaded event
+wsRegisterClosest();
